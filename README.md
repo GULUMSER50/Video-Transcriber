@@ -19,7 +19,7 @@ This Streamlit application converts video files to audio, creates transcripts, a
 
 1. Clone the repository:
    ```
-   git clone https://github.com/your-username/Video-Transcriber.git
+   git clone https://github.com/GULUMSER50/Video-Transcriber.git
    cd Video-Transcriber
    ```
 
@@ -42,3 +42,7 @@ This Streamlit application converts video files to audio, creates transcripts, a
 ## Usage
 
 Run the Streamlit app:
+```
+streamlit run main.py
+```
+

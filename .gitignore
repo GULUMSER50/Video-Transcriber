@@ -1,0 +1,22 @@
+
+# Ignore the secure_config.json file
+secure_config.json
+
+# Ignore the .env file
+.env
+
+# Ignore the .venv directory
+.venv/
+
+# Ignore the __pycache__ directory
+__pycache__/
+
+# Ignore the .DS_Store file
+.DS_Store
+
+# tests
+./tests
+
+#wav & mp4
+*.wav
+*.mp4

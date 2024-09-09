@@ -1,42 +1,43 @@
-import speech_recognition as sr
+import logging
+from openai import OpenAI
+from config import OPENAI_API_KEY, WHISPER_MODEL
 from pydub import AudioSegment
 import os
-from ..utils.helpers import ensure_dir
 
-def transcribe_audio(audio_path):
-    # Convert audio to WAV format using pydub
-    audio = AudioSegment.from_file(audio_path)
-    wav_path = audio_path.rsplit('.', 1)[0] + '.wav'
-    audio.export(wav_path, format="wav")
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-    recognizer = sr.Recognizer()
-    with sr.AudioFile(wav_path) as source:
-        audio = recognizer.record(source)
-    
+logger = logging.getLogger(__name__)
+
+def split_audio(audio_file_path, chunk_length_ms=60000):
+    audio = AudioSegment.from_wav(audio_file_path)
+    chunks = []
+    for i in range(0, len(audio), chunk_length_ms):
+        chunk = audio[i:i+chunk_length_ms]
+        chunk_path = f"{audio_file_path}_chunk_{i//chunk_length_ms}.wav"
+        chunk.export(chunk_path, format="wav")
+        chunks.append(chunk_path)
+    return chunks
+
+def transcribe_audio(audio_file_path):
     try:
-        text = recognizer.recognize_google(audio, show_all=True)
-        if isinstance(text, dict) and 'alternative' in text:
-            transcript = text['alternative'][0]['transcript']
-            detected_lang = text['language'] if 'language' in text else 'unknown'
-        else:
-            print(f"Unexpected transcription result: {text}")
-            transcript = str(text)  # Convert to string if it's not already
-            detected_lang = 'unknown'
+        logger.info(f"Attempting to transcribe audio file: {audio_file_path}")
+        logger.info(f"Using Whisper model: {WHISPER_MODEL}")
         
-        # Clean up temporary WAV file
-        os.remove(wav_path)
+        # Split audio into chunks
+        chunks = split_audio(audio_file_path)
         
-        return transcript, detected_lang
-    except sr.UnknownValueError:
-        print("Speech Recognition could not understand the audio")
-        return "Speech Recognition could not understand the audio", None
-    except sr.RequestError as e:
-        print(f"Could not request results from Speech Recognition service; {e}")
-        return f"Could not request results from Speech Recognition service; {e}", None
+        full_transcript = ""
+        for chunk in chunks:
+            with open(chunk, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model=WHISPER_MODEL,
+                    file=audio_file
+                )
+            full_transcript += transcript.text + " "
+            os.remove(chunk)  # Remove the temporary chunk file
+        
+        logger.info("Transcription successful")
+        return full_transcript.strip(), "en"  # Assuming English for now, you may need to detect language
     except Exception as e:
-        print(f"An unexpected error occurred during transcription: {e}")
-        return f"An unexpected error occurred during transcription: {e}", None
-    finally:
-        # Ensure temporary WAV file is removed even if an exception occurs
-        if os.path.exists(wav_path):
-            os.remove(wav_path)
+        logger.exception(f"Error in transcription: {str(e)}")
+        return None, None
