@@ -1,11 +1,15 @@
 import streamlit as st
 import os
-import time
+import logging
 from openai import OpenAIError
-from config import LANGUAGES, TEMP_VIDEO, TEMP_AUDIO
+from config import OPENAI_API_KEY, LANGUAGES, WHISPER_MODEL, TRANSLATION_MODEL, TEMP_VIDEO, TEMP_AUDIO
 from src.video.video_to_audio import extract_audio as convert_video_to_audio
 from src.audio.audio_to_text import transcribe_audio
 from src.text_translation import translate_text
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Video Transcriber & Translator", layout="wide")
 
@@ -71,8 +75,17 @@ st.markdown("""
     a:hover {
         text-decoration: underline;
     }
-    .stFileUploader > div {
-        background-color: rgba(255, 255, 255, 0.1);
+    .stFileUploader > button {
+        background-color: rgba(255, 255, 255, 0.1) !important;
+        color: #FFFFFF !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    }
+    .stFileUploader > button:hover {
+        background-color: rgba(255, 255, 255, 0.2) !important;
+    }
+    .stFileUploader > div[data-testid="stFileUploadDropzone"] {
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        border: 1px dashed rgba(255, 255, 255, 0.2) !important;
     }
     .upload-video-text, .select-languages-text {
         color: #FFFFFF;
@@ -89,11 +102,52 @@ st.markdown("""
         border-radius: 5px;
         max-width: 60%;
     }
+    .fancy-separator {
+        border: 0;
+        height: 1px;
+        background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0));
+        margin: 20px 0;
+    }
+    .white-header {
+        color: #FFFFFF;
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-top: 20px;
+        margin-bottom: 10px;
+    }
+    .download-button {
+        background-color: #3498db;
+        color: white;
+        padding: 10px 15px;
+        border-radius: 5px;
+        border: none;
+        cursor: pointer;
+        font-weight: bold;
+        margin-top: 10px;
+        display: inline-block;
+    }
+    .download-button:hover {
+        background-color: #2980b9;
+    }
+    .download-explanation {
+        color: #CCCCCC;
+        font-size: 0.9rem;
+        margin-top: 5px;
+    }
+    /* Remove all spacing around the video */
+    .stVideo {
+        margin-bottom: 0 !important;
+    }
+    .stVideo > div {
+        margin: 10 !important;
+        padding: 10 !important;
+        
+    }
     </style>
     """, unsafe_allow_html=True)
 
 st.markdown("<h1 class='title'>Video Transcriber & Translator</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>Convert, Transcribe, and Translate with Ease</p>", unsafe_allow_html=True)
+st.markdown("<p class='subtitle'>Convert, Transcribe, and Translate with Ease!</p>", unsafe_allow_html=True)
 st.markdown("<p class='author'>by <a href='https://www.linkedin.com/in/g%C3%BCl%C3%BCmser-eskiturk-86687b150/' target='_blank' style='color: #CCCCCC; text-decoration: none;'>Gülümser Eskitürk</a></p>", unsafe_allow_html=True)
 
 # Create two columns for inputs
@@ -101,61 +155,76 @@ col1, col2 = st.columns([2, 1])
 
 with col1:
     st.markdown("<h3 class='upload-video-text'>Upload Your Video</h3>", unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("", type=["mp4", "avi", "mov"])
+    uploaded_file = st.file_uploader("Upload video file", type=["mp4", "avi", "mov"], label_visibility="collapsed")
 
 with col2:
     st.markdown("<h3 class='select-languages-text'>Select Languages</h3>", unsafe_allow_html=True)
-    selected_languages = st.multiselect("", LANGUAGES)
+    selected_languages = st.multiselect("Select target languages", LANGUAGES, label_visibility="collapsed")
 
 # Display uploaded video
 if uploaded_file:
+    st.markdown("<div class='small-video-container'>", unsafe_allow_html=True)
     st.video(uploaded_file, start_time=0)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # Processing section
 if uploaded_file is not None and selected_languages:
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        progress_bar = st.progress(0)
+    
+    with col2:
+        status_text = st.empty()
+    
+    with col3:
+        info_text = st.empty()
     
     with st.spinner("Processing video..."):
-        with open(TEMP_VIDEO, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        
-        # Video to Audio
-        status_text.text("Converting video to audio...")
-        progress_bar.progress(25)
-        audio_file = convert_video_to_audio(TEMP_VIDEO, TEMP_AUDIO)
-        
-        if audio_file:
-            try:
+        try:
+            with open(TEMP_VIDEO, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            
+            # Video to Audio
+            status_text.text("Converting video to audio...")
+            progress_bar.progress(25)
+            audio_file = convert_video_to_audio(TEMP_VIDEO, TEMP_AUDIO)
+            
+            if audio_file:
                 # Transcription
                 status_text.text("Transcribing audio...")
                 progress_bar.progress(50)
-                start_time = time.time()
                 transcript, detected_lang = transcribe_audio(audio_file)
-                end_time = time.time()
                 
                 if transcript:
                     progress_bar.progress(75)
-                    st.success(f"Transcription completed in {end_time - start_time:.2f} seconds")
-                    st.subheader("Original Transcript")
+                    info_text.success("Transcription completed successfully")
+                    st.markdown("<h2 class='white-header'>Original Transcript</h2>", unsafe_allow_html=True)
                     st.write(transcript)
                     st.markdown(f"<div style='color: white;'>Detected language: {detected_lang}</div>", unsafe_allow_html=True)
+                    
+                    st.markdown("<hr class='fancy-separator'>", unsafe_allow_html=True)
                     
                     # Translation
                     for lang in selected_languages:
                         if lang.lower() != detected_lang:
                             try:
+                                status_text.text(f"Translating to {lang}...")
                                 translated_text = translate_text(transcript, lang)
                                 if translated_text:
-                                    st.subheader(f"{lang} Translation")
+                                    st.markdown(f"<h2 class='white-header'>{lang} Translation</h2>", unsafe_allow_html=True)
                                     st.write(translated_text)
                                     
-                                    st.download_button(
+                                    download_button = st.download_button(
                                         label=f"Download {lang} translation",
                                         data=translated_text,
                                         file_name=f"translation_{lang}.txt",
-                                        mime="text/plain"
+                                        mime="text/plain",
+                                        key=f"download_{lang}",
                                     )
+                                    st.markdown(f"<div class='download-explanation'>Click to download the {lang} translation as a text file.</div>", unsafe_allow_html=True)
+                                    
+                                    st.markdown("<hr class='fancy-separator'>", unsafe_allow_html=True)
                                 else:
                                     st.warning(f"Translation to {lang} failed.")
                             except OpenAIError as e:
@@ -165,12 +234,16 @@ if uploaded_file is not None and selected_languages:
                     
                     progress_bar.progress(100)
                     status_text.text("Processing complete!")
+                    info_text.success("All tasks completed successfully!")
                 else:
-                    st.error("Transcription failed. The audio file may be corrupted or empty.")
-            except Exception as e:
-                st.error(f"An error occurred during processing: {str(e)}")
-        else:
-            st.error("Failed to convert video to audio. The video file may be corrupted or in an unsupported format.")
+                    st.error("Transcription failed. Please check the logs for more details.")
+                    logger.error("Transcription failed: transcript is None")
+            else:
+                st.error("Failed to convert video to audio. The video file may be corrupted or in an unsupported format.")
+                logger.error("Failed to convert video to audio")
+        except Exception as e:
+            st.error(f"An error occurred during processing: {str(e)}")
+            logger.exception("Error during processing")
         
         # Clean up temporary files
         for temp_file in [TEMP_VIDEO, TEMP_AUDIO]:
