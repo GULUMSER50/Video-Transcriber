@@ -1,0 +1,16 @@
+moviepy==1.0.3
+pydub==0.25.1
+SpeechRecognition==3.8.1
+ffmpeg-python==0.2.0
+streamlit==1.38.0
+openai==1.44.0
+numpy==2.0.2
+pandas==2.2.2
+Pillow==10.4.0
+protobuf==5.28.0
+pyarrow==17.0.0
+pydeck==0.9.1
+requests==2.32.3
+tqdm==4.66.5
+openai-whisper==20231117
+python-dotenv==1.0.0
