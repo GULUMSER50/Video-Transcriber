@@ -1,11 +1,13 @@
 import streamlit as st
 import os
 import logging
+import time
 from openai import OpenAIError
 from config import OPENAI_API_KEY, LANGUAGES, WHISPER_MODEL, TRANSLATION_MODEL, TEMP_VIDEO, TEMP_AUDIO
 from src.video.video_to_audio import extract_audio as convert_video_to_audio
 from src.audio.audio_to_text import transcribe_audio
 from src.text_translation import translate_text
+from pathlib import Path
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -155,7 +157,7 @@ col1, col2 = st.columns([2, 1])
 
 with col1:
     st.markdown("<h3 class='upload-video-text'>Upload Your Video</h3>", unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("Upload video file", type=["mp4", "avi", "mov"], label_visibility="collapsed")
+    uploaded_file = st.file_uploader("Upload video file", type=["mp4", "avi", "mov", "mkv", "flv", "wmv", "webm"], label_visibility="collapsed")
 
 with col2:
     st.markdown("<h3 class='select-languages-text'>Select Languages</h3>", unsafe_allow_html=True)
@@ -167,8 +169,21 @@ if uploaded_file:
     st.video(uploaded_file, start_time=0)
     st.markdown("</div>", unsafe_allow_html=True)
 
+# Define the data directory
+DATA_DIR = Path(os.path.expanduser("~/Desktop/grad_project_upschool/Video-Transcriber/data"))
+
+# Ensure the data directory exists
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 # Processing section
 if uploaded_file is not None and selected_languages:
+    # Generate a unique filename for the uploaded video
+    video_filename = f"{uploaded_file.name}_{int(time.time())}"
+    video_path = DATA_DIR / video_filename
+
+    with open(video_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -182,13 +197,10 @@ if uploaded_file is not None and selected_languages:
     
     with st.spinner("Processing video..."):
         try:
-            with open(TEMP_VIDEO, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            
             # Video to Audio
             status_text.text("Converting video to audio...")
             progress_bar.progress(25)
-            audio_file = convert_video_to_audio(TEMP_VIDEO, TEMP_AUDIO)
+            audio_file = convert_video_to_audio(str(video_path), TEMP_AUDIO)
             
             if audio_file:
                 # Transcription
@@ -205,6 +217,11 @@ if uploaded_file is not None and selected_languages:
                     
                     st.markdown("<hr class='fancy-separator'>", unsafe_allow_html=True)
                     
+                    # Save transcripts and translations
+                    transcript_path = DATA_DIR / f"input/{video_filename}_transcript.txt"
+                    with open(transcript_path, "w") as f:
+                        f.write(transcript)
+
                     # Translation
                     for lang in selected_languages:
                         if lang.lower() != detected_lang:
@@ -212,7 +229,22 @@ if uploaded_file is not None and selected_languages:
                                 status_text.text(f"Translating to {lang}...")
                                 translated_text = translate_text(transcript, lang)
                                 if translated_text:
-                                    st.markdown(f"<h2 class='white-header'>{lang} Translation</h2>", unsafe_allow_html=True)
+                                    st.markdown(f"""
+                                    <style>
+                                        .stDownloadButton>button {{
+                                            background-color: #3498db;
+                                            color: white;
+                                            padding: 0.5rem 1rem;
+                                            border-radius: 5px;
+                                            border: none;
+                                            font-weight: bold;
+                                            margin-top: 10px;
+                                        }}
+                                        .stDownloadButton>button:hover {{
+                                            background-color: #2980b9;
+                                        }}
+                                    </style>
+                                    """, unsafe_allow_html=True)
                                     st.write(translated_text)
                                     
                                     download_button = st.download_button(
@@ -222,9 +254,12 @@ if uploaded_file is not None and selected_languages:
                                         mime="text/plain",
                                         key=f"download_{lang}",
                                     )
-                                    st.markdown(f"<div class='download-explanation'>Click to download the {lang} translation as a text file.</div>", unsafe_allow_html=True)
                                     
                                     st.markdown("<hr class='fancy-separator'>", unsafe_allow_html=True)
+                                    # Save translations
+                                    translation_path = DATA_DIR / f"output/{video_filename}_translation_{lang}.txt"
+                                    with open(translation_path, "w") as f:
+                                        f.write(translated_text)
                                 else:
                                     st.warning(f"Translation to {lang} failed.")
                             except OpenAIError as e:
@@ -239,14 +274,14 @@ if uploaded_file is not None and selected_languages:
                     st.error("Transcription failed. Please check the logs for more details.")
                     logger.error("Transcription failed: transcript is None")
             else:
-                st.error("Failed to convert video to audio. The video file may be corrupted or in an unsupported format.")
+                st.error("Failed to convert video to audio. The video file may be corrupted, in an unsupported format, or may not contain an audio track.")
                 logger.error("Failed to convert video to audio")
         except Exception as e:
             st.error(f"An error occurred during processing: {str(e)}")
             logger.exception("Error during processing")
         
         # Clean up temporary files
-        for temp_file in [TEMP_VIDEO, TEMP_AUDIO]:
+        for temp_file in [video_path, TEMP_AUDIO]:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
 
