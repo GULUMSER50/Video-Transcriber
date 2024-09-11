@@ -268,7 +268,7 @@ def process_video(uploaded_file, selected_languages):
                                 if translated_text:
                         
                         
-                                    st.markdown(f"<h4 style='color: white;'>Translation to {lang}</h3>", unsafe_allow_html=True)
+                                    st.markdown(f"<h4 style='color: white;'>Translation to {lang}</h4>", unsafe_allow_html=True)
                                     
                                     # Prepare SRT content
                                     srt_content = f"1\n00:00:00,000 --> 00:00:05,000\n{translated_text}"
@@ -283,15 +283,17 @@ def process_video(uploaded_file, selected_languages):
                                     
                                     st.markdown("<hr class='fancy-separator'>", unsafe_allow_html=True)
                                     # Save translations
-                                    translation_path = DATA_DIR / f"output/{video_filename}_translation_{lang}.txt"
-                                    with open(translation_path, "w") as f:
-                                        f.write(translated_text)
+                                    output_dir = DATA_DIR / "output"
+                                    output_dir.mkdir(parents=True, exist_ok=True)  # Ensure output directory exists
+                                    translation_path = output_dir / f"{video_filename}_translation_{lang}.srt"
+                                    with open(translation_path, "w", encoding='utf-8') as f:
+                                        f.write(srt_content)
                                 else:
                                     st.warning(f"Translation to {lang} failed.")
                             except OpenAIError as e:
                                 st.error(f"An error occurred during translation to {lang}: {str(e)}")
                         else:
-                            st.markdown(f"<h4 style='color: white;'>Skipping translation to {lang} as it's the detected original language.</h3>", unsafe_allow_html=True)
+                            st.markdown(f"<h4 style='color: white;'>Skipping translation to {lang} as it's the detected original language.</h4>", unsafe_allow_html=True)
                     
                     progress_bar.progress(100)
                     status_text.text("Processing complete!")
@@ -310,6 +312,10 @@ def process_video(uploaded_file, selected_languages):
         for temp_file in [video_path, TEMP_AUDIO]:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
+
+        # Remove temporary SRT files
+        for file in output_dir.glob(f"{video_filename}_translation_*.srt"):
+            file.unlink()
 
 # Processing section
 if uploaded_file is not None and selected_languages:
