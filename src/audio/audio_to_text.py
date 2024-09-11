@@ -8,6 +8,9 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 logger = logging.getLogger(__name__)
 
+class TranscriptionError(Exception):
+    pass
+
 def split_audio(audio_file_path, chunk_length_ms=60000):
     audio = AudioSegment.from_wav(audio_file_path)
     chunks = []
@@ -36,8 +39,11 @@ def transcribe_audio(audio_file_path):
             full_transcript += transcript.text + " "
             os.remove(chunk)  # Remove the temporary chunk file
         
+        if not full_transcript.strip():
+            raise TranscriptionError("Empty transcript returned")
+        
         logger.info("Transcription successful")
         return full_transcript.strip(), "en"  # Assuming English for now, you may need to detect language
     except Exception as e:
         logger.exception(f"Error in transcription: {str(e)}")
-        return None, None
+        raise TranscriptionError(f"Transcription failed: {str(e)}")
