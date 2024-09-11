@@ -13,7 +13,7 @@ from config import (
     TEMP_AUDIO
 )
 from src.video.video_to_audio import extract_audio as convert_video_to_audio
-from src.audio.audio_to_text import transcribe_audio
+from src.audio.audio_to_text import transcribe_audio, TranscriptionError
 from src.text_translation import translate_text
 from pathlib import Path
 
@@ -190,8 +190,7 @@ DATA_DIR = Path(os.path.expanduser("~/Desktop/grad_project_upschool/Video-Transc
 # Ensure the data directory exists
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# Processing section
-if uploaded_file is not None and selected_languages:
+def process_video(uploaded_file, selected_languages):
     # Generate a unique filename for the uploaded video
     video_filename = f"{uploaded_file.name}_{int(time.time())}"
     video_path = DATA_DIR / video_filename
@@ -221,8 +220,15 @@ if uploaded_file is not None and selected_languages:
                 # Transcription
                 status_text.text("Transcribing audio...")
                 progress_bar.progress(50)
-                transcript, detected_lang = transcribe_audio(audio_file)
-                
+                try:
+                    transcript, detected_lang = transcribe_audio(audio_file)
+                    if not transcript:
+                        raise TranscriptionError("Empty transcript returned")
+                except TranscriptionError as e:
+                    st.error(f"Transcription failed: {str(e)}")
+                    logger.error(f"Transcription failed: {str(e)}")
+                    return
+
                 if transcript:
                     progress_bar.progress(75)
                     info_text.success("Transcription completed successfully")
@@ -245,8 +251,10 @@ if uploaded_file is not None and selected_languages:
                     st.markdown("<hr class='fancy-separator'>", unsafe_allow_html=True)
                     
                     # Save transcripts and translations
+
                     transcript_file = get_transcript_file_path(video_filename, int(time.time()))
                     with open(transcript_file, 'w', encoding='utf-8') as f:
+
                         f.write(transcript)
 
                     # Translation
@@ -256,6 +264,7 @@ if uploaded_file is not None and selected_languages:
                                 status_text.text(f"Translating to {lang}...")
                                 translated_text = translate_text(transcript, lang)
                                 if translated_text:
+                        
                                     st.markdown(f"<h4 style='color: white;'>Translation to {lang}</h3>", unsafe_allow_html=True)
                                     
                                     # Prepare SRT content
@@ -281,8 +290,8 @@ if uploaded_file is not None and selected_languages:
                     status_text.text("Processing complete!")
                     info_text.success("All tasks completed successfully!")
                 else:
-                    st.error("Transcription failed. Please check the logs for more details.")
-                    logger.error("Transcription failed: transcript is None")
+                    st.error("Transcription failed: Empty transcript returned.")
+                    logger.error("Transcription failed: Empty transcript returned")
             else:
                 st.error("Failed to convert video to audio. The video file may be corrupted, in an unsupported format, or may not contain an audio track.")
                 logger.error("Failed to convert video to audio")
@@ -294,6 +303,10 @@ if uploaded_file is not None and selected_languages:
         for temp_file in [video_path, TEMP_AUDIO]:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
+
+# Processing section
+if uploaded_file is not None and selected_languages:
+    process_video(uploaded_file, selected_languages)
 
 # Add the application description at the bottom left
 st.markdown("<div class='app-description'>This application converts video files to audio, creates transcripts, and translates to selected languages.</div>", unsafe_allow_html=True)
