@@ -3,7 +3,15 @@ import os
 import logging
 import time
 from openai import OpenAIError
-from config import OPENAI_API_KEY, LANGUAGES, WHISPER_MODEL, TRANSLATION_MODEL, TEMP_VIDEO, TEMP_AUDIO
+from config import (
+    get_input_file_path,
+    get_transcript_file_path,
+    debug_file_paths,
+    INPUT_DIR,
+    OUTPUT_DIR,
+    LANGUAGES,
+    TEMP_AUDIO
+)
 from src.video.video_to_audio import extract_audio as convert_video_to_audio
 from src.audio.audio_to_text import transcribe_audio
 from src.text_translation import translate_text
@@ -145,6 +153,19 @@ st.markdown("""
         padding: 10 !important;
         
     }
+    .stDownloadButton>button {
+        background-color: #3498db;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 5px;
+        border: none;
+        font-weight: bold;
+        margin-top: 10px;
+        text-transform: none;
+    }
+    .stDownloadButton>button:hover {
+        background-color: #2980b9;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -163,11 +184,11 @@ with col2:
     st.markdown("<h3 class='select-languages-text'>Select Languages</h3>", unsafe_allow_html=True)
     selected_languages = st.multiselect("Select target languages", LANGUAGES, label_visibility="collapsed")
 
-# Display uploaded video
-if uploaded_file:
-    st.markdown("<div class='small-video-container'>", unsafe_allow_html=True)
-    st.video(uploaded_file, start_time=0)
-    st.markdown("</div>", unsafe_allow_html=True)
+# Define the data directory
+DATA_DIR = Path(os.path.expanduser("~/Desktop/grad_project_upschool/Video-Transcriber/data"))
+
+# Ensure the data directory exists
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # Define the data directory
 DATA_DIR = Path(os.path.expanduser("~/Desktop/grad_project_upschool/Video-Transcriber/data"))
@@ -211,47 +232,49 @@ if uploaded_file is not None and selected_languages:
                 if transcript:
                     progress_bar.progress(75)
                     info_text.success("Transcription completed successfully")
-                    st.markdown("<h2 class='white-header'>Original Transcript</h2>", unsafe_allow_html=True)
-                    st.write(transcript)
-                    st.markdown(f"<div style='color: white;'>Detected language: {detected_lang}</div>", unsafe_allow_html=True)
+                    st.markdown("<h2 class='white-header'>Transcription and Translation Results</h2>", unsafe_allow_html=True)
+                    st.markdown("<hr class='fancy-separator'>", unsafe_allow_html=True)
+                    # Convert language code to full name
+                    full_lang_name = next((lang for lang in LANGUAGES if lang.lower().startswith(detected_lang.lower())), detected_lang)
+                    st.markdown(f"<h4 style='color: white;'>Detected language: {full_lang_name}</h3>", unsafe_allow_html=True)
+                    
+                    # Add download button for original transcript
+                    srt_content = f"1\n00:00:00,000 --> 00:00:05,000\n{transcript}"
+                    st.download_button(
+                        label=f"Download {full_lang_name} transcript",
+                        data=srt_content,
+                        file_name=f"original_transcript_{full_lang_name}.srt",
+                        mime="text/srt",
+                        key="download_original",
+                    )
                     
                     st.markdown("<hr class='fancy-separator'>", unsafe_allow_html=True)
                     
                     # Save transcripts and translations
-                    transcript_path = DATA_DIR / f"input/{video_filename}_transcript.txt"
-                    with open(transcript_path, "w") as f:
+
+                    transcript_file = get_transcript_file_path(video_filename, int(time.time()))
+                    with open(transcript_file, 'w', encoding='utf-8') as f:
+
                         f.write(transcript)
 
                     # Translation
                     for lang in selected_languages:
-                        if lang.lower() != detected_lang:
+                        if lang.lower() != full_lang_name.lower():
                             try:
                                 status_text.text(f"Translating to {lang}...")
                                 translated_text = translate_text(transcript, lang)
                                 if translated_text:
-                                    st.markdown(f"""
-                                    <style>
-                                        .stDownloadButton>button {{
-                                            background-color: #3498db;
-                                            color: white;
-                                            padding: 0.5rem 1rem;
-                                            border-radius: 5px;
-                                            border: none;
-                                            font-weight: bold;
-                                            margin-top: 10px;
-                                        }}
-                                        .stDownloadButton>button:hover {{
-                                            background-color: #2980b9;
-                                        }}
-                                    </style>
-                                    """, unsafe_allow_html=True)
-                                    st.write(translated_text)
+                        
+                                    st.markdown(f"<h4 style='color: white;'>Translation to {lang}</h3>", unsafe_allow_html=True)
+                                    
+                                    # Prepare SRT content
+                                    srt_content = f"1\n00:00:00,000 --> 00:00:05,000\n{translated_text}"
                                     
                                     download_button = st.download_button(
                                         label=f"Download {lang} translation",
-                                        data=translated_text,
-                                        file_name=f"translation_{lang}.txt",
-                                        mime="text/plain",
+                                        data=srt_content,
+                                        file_name=f"translation_{lang}.srt",
+                                        mime="text/srt",
                                         key=f"download_{lang}",
                                     )
                                     
@@ -265,7 +288,7 @@ if uploaded_file is not None and selected_languages:
                             except OpenAIError as e:
                                 st.error(f"An error occurred during translation to {lang}: {str(e)}")
                         else:
-                            st.markdown(f"<div style='color: white;'>Skipping translation to {lang} as it's the detected original language.</div>", unsafe_allow_html=True)
+                            st.markdown(f"<h4 style='color: white;'>Skipping translation to {lang} as it's the detected original language.</h3>", unsafe_allow_html=True)
                     
                     progress_bar.progress(100)
                     status_text.text("Processing complete!")
