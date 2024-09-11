@@ -190,6 +190,12 @@ DATA_DIR = Path(os.path.expanduser("~/Desktop/grad_project_upschool/Video-Transc
 # Ensure the data directory exists
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+# Define the data directory
+DATA_DIR = Path(os.path.expanduser("~/Desktop/grad_project_upschool/Video-Transcriber/data"))
+
+# Ensure the data directory exists
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 # Processing section
 if uploaded_file is not None and selected_languages:
     # Generate a unique filename for the uploaded video
@@ -245,8 +251,10 @@ if uploaded_file is not None and selected_languages:
                     st.markdown("<hr class='fancy-separator'>", unsafe_allow_html=True)
                     
                     # Save transcripts and translations
+
                     transcript_file = get_transcript_file_path(video_filename, int(time.time()))
                     with open(transcript_file, 'w', encoding='utf-8') as f:
+
                         f.write(transcript)
 
                     # Translation
@@ -256,6 +264,7 @@ if uploaded_file is not None and selected_languages:
                                 status_text.text(f"Translating to {lang}...")
                                 translated_text = translate_text(transcript, lang)
                                 if translated_text:
+                        
                                     st.markdown(f"<h4 style='color: white;'>Translation to {lang}</h3>", unsafe_allow_html=True)
                                     
                                     # Prepare SRT content
@@ -270,6 +279,10 @@ if uploaded_file is not None and selected_languages:
                                     )
                                     
                                     st.markdown("<hr class='fancy-separator'>", unsafe_allow_html=True)
+                                    # Save translations
+                                    translation_path = DATA_DIR / f"output/{video_filename}_translation_{lang}.txt"
+                                    with open(translation_path, "w") as f:
+                                        f.write(translated_text)
                                 else:
                                     st.warning(f"Translation to {lang} failed.")
                             except OpenAIError as e:
